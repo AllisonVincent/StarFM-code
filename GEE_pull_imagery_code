@@ -1,0 +1,285 @@
+// Javascript for Google Earth Engine code for pulling imagery inputs for use in STARFM 
+// original code by Faye Peters
+// this version was accessed from Megan Gallagher's MS thesis, contributions also from Jake Graham
+// further editing by Allison Vincent
+
+// for use with Landsat8 and MODIS Terra Daily Surface Reflectance (MOD09GA) 500m
+
+// Imports needed
+var landsat = ee.ImageCollection("LANDSAT/LC08/C01/T1_SR"),
+    watersheds = ee.FeatureCollection("USGS/WBD/2017/HUC10"),
+    modis = ee.ImageCollection("MODIS/006/MCD43A4"),
+    mod09 = ee.ImageCollection("MODIS/006/MOD09GA"),
+    testarea =  // currently set to encompass entire East River watershed
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-107.14224935824006, 39.04269598125057],
+          [-107.14224935824006, 38.65177792068302],
+          [-106.688376677576, 38.65177792068302],
+          [-106.688376677576, 39.04269598125057]]], null, false),
+    outerarea = 
+    /* color: #98ff00 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-107.2651589041385, 39.11199116866305],
+          [-107.2651589041385, 38.58149602341235],
+          [-106.57370687777131, 38.58149602341235],
+          [-106.57370687777131, 39.11199116866305]]], null, false);
+
+
+// for viewing true color imagery
+var visParams = {bands: ['B4', 'B3', 'B2'], min: 0, max: 10000};
+var landsat2016 = landsat.filterDate('2016-04-01', '2016-04-05');
+Map.addLayer(landsat2016, visParams, 'l8 true color'); // displays the most recent pixels
+
+var visParamsmod09 = {bands: ['sur_refl_b01', 'sur_refl_b04', 'sur_refl_b03'], min: 0, max: 10000};
+var mod09_2016 = mod09.filterDate('2016-03-20', '2016-03-22');
+Map.addLayer(mod09_2016, visParamsmod09, 'mod09 true color');
+
+// for reference, add the boundary of the East River watershed
+Map.addLayer(watersheds, {}, "watersheds", false)
+var watershed = watersheds.filterMetadata('name', 'equals', 'East River')
+var EastRiver = watershed.filterMetadata('states', 'equals', 'CO');
+Map.centerObject(EastRiver, 11);
+Map.addLayer(EastRiver, {}, "East River Boundary");
+
+
+//// Code for original workflow starts here
+
+//import Landsat 8 Surface Reflectance Tier 1 and MODIS MOD09GA
+var inner_region = testarea //region you want to export 
+var outer_region = outerarea // outer bounds of image to catch boundary effect, make larger than region
+var date_begin = '2016-03-17' //start date of data collection, must be a landsat image date
+var date_end ='2016-05-05' // end date of data collection, must be the day AFTER last landsat image
+
+// for output
+var csv_title = '2016_Dates_BOP_East' //title of csv output
+var ls_title = '2016_landsat_East'   // title of landsat tif file
+var mod_title = '2016_mod_East'      // title of modis tif file
+
+//Preliminary filtering of MODIS and Landsat
+var filt_mod = mod09.filterDate(date_begin, date_end);
+var filt_l8 = landsat.filterDate(date_begin, date_end)
+              .filterBounds(outerarea); // get the landsat tiles that overlap the area of interest 
+  
+print("original landsat", filt_l8)
+print("original modis", filt_mod)
+              
+// Extract feature collection bounds for clipping and regional exporting. 
+// This sets the correct coordinate system and spatial resolution.
+var subset_bounds = outerarea.transform('EPSG:4326', 30).bounds().getInfo(); 
+
+
+// Landsat Pixel QA
+// get rid of bad pixels but keep metadata date information (for landsat data)
+var removeBadObservations = function(image){
+    var clear_scenes = ee.Image(image).select('pixel_qa').bitwiseAnd(2).neq(0); // selecting clear scenes (selecting the bit value = 2, which is clear)
+    var snow_scenes = ee.Image(image).select('pixel_qa').bitwiseAnd(16).neq(0); // selecting snow scenes
+    var good_scenes = snow_scenes.add(clear_scenes);
+  
+    //find the sum of the number of bands with mask applied
+    var numberBandsHaveData =
+    image.mask().reduce(ee.Reducer.sum());
+  
+    // make sure all bands have data (metadata?)
+    var allOrNoBandsHaveData =
+    numberBandsHaveData.eq(0).or(numberBandsHaveData.gte(9));
+    var allBandsHaveData = allOrNoBandsHaveData;
+
+   //Make sure no band is just under zero
+    var allBandsGT = image.reduce(ee.Reducer.min()).gt(-0.001);
+    
+    // combine all the masks from above and return the output in original format
+    var result = ee.Image(image).mask(image.mask().and(good_scenes).and(allBandsHaveData).and(allBandsGT)); //bands have clear pixels, still have data, and are greater than zero
+    return result.copyProperties(ee.Image(image),['system:time_start']);
+};
+
+//NDSI functions for Landsat and MODIS
+
+//calculate NDSI for modis MCD43A4, and multiply the results by 10,000
+var getNDSI_mod = function(image){
+  return image
+    .addBands(image.normalizedDifference(['sur_refl_b04','sur_refl_b06']).multiply(10000).rename('NDSI'));}; 
+
+// calculate NDSI for landsat (need to use this way or it messes up the image collection at the end) 
+var getNDSI_l8= function(image){
+var ndsi = ee.Image(image).normalizedDifference(['B3','B6']);
+return ndsi.copyProperties(ee.Image(image),['system:time_start']);
+}; // find ndsi using the properties of the original image but storing as a variable
+
+// apply the functions to entire collection to find ndsi and remove the bad data and bounded to area of interest
+var filt2_l8= filt_l8.filterBounds(subset_bounds).aside(print).map(removeBadObservations).map(getNDSI_l8);
+
+print("L8 ndsi added", filt2_l8)
+
+// apply the functions to find ndsi and bounded to area of interest (not removing bad data from modis yet)
+var filtered_modis = filt_mod.filterBounds(subset_bounds).aside(print).map(getNDSI_mod);
+print("modis ndsi added", filtered_modis)
+
+var subset_mask = ee.Image().byte().paint(outerarea, "id").add(1);
+
+// Pull out the date of modis data:
+var extract_modis_date = function(row) {
+  var d = ee.Date(row.get('system:time_start'));
+  var d2 = ee.Date.fromYMD(d.get('year'), d.get('month'), d.get('day'));
+  var result = ee.Feature(null, {'date': d2});
+  result = result.set({'date': d2});
+  return result;
+};
+
+filtered_modis = filtered_modis.select('NDSI'); //Take only NDSI band
+print('modis only ndsi',filtered_modis) // make sure the modis image collection only has the NDSI band for each element
+Map.addLayer(filtered_modis, {}, 'filtered modis')
+
+// creates the image stack containing modis data that will be exported
+// multi-image modis gets turned into one image with multiple bands containing ndsi for each date
+var modis_multiband = ee.Image(filtered_modis.filterDate(date_begin, date_end).iterate( function(x, modis_multiband) {
+  return ee.Image(modis_multiband).addBands(ee.Image(x));
+  }, filtered_modis.first()));
+print(modis_multiband, 'modis_multiband');
+ 
+// get the dates for each modis observation
+var dates_modis = filtered_modis.map(extract_modis_date);
+print('dates_modis', dates_modis.getInfo());
+ 
+// applies quality masked landsat with ndsi band to the outer bounding region 
+var filt2_l8_ndsi = filt2_l8.map(function(image) {
+return ee.Image(image)
+  .clip(subset_bounds)
+  .mask(ee.Image(image).mask().multiply(subset_mask));
+});
+
+print("filtered modis", filtered_modis)
+print("filt2_l8_ndsi", filt2_l8_ndsi)
+Map.addLayer(filt2_l8_ndsi, {}, "filt2_l8_ndsi");
+ 
+
+//use this to choose the range of days, and check for overlap
+var day_expand = 1;
+
+// this function creates a variable that will be used to create the image collection with empty images for non landsat days
+var reduceLandsatNDSI = function(MODISdate) {
+ MODISdate = ee.Date(MODISdate.get('date'));
+ 
+  // use the masked landsat w/ ndsi data, filter by date object structure from above and advance by one day
+  var ndsi_subset = ee.ImageCollection(filt2_l8_ndsi).filterDate( MODISdate,
+  MODISdate.advance(day_expand, 'day') );
+ 
+  ndsi_subset = ndsi_subset.map(function (image) {
+  var diff = MODISdate.difference(ee.Date(ee.Image(image).get('system:time_start')), 'day').abs();
+  return ee.Image(image).set('diff', diff);
+  });
+ 
+  ndsi_subset = ndsi_subset.sort('diff');
+  var ndsi_first = ndsi_subset.reduce('first');
+  var ndsi_mean = ndsi_subset.reduce('mean');
+ 
+  return ee.Algorithms.If(
+  ndsi_first.bandNames(),
+  ndsi_first.eq(0).multiply(ndsi_mean).add(ndsi_first),
+  ee.Image(0)
+  );
+};
+
+// getting the dates for output csv table 
+var extract_landsat_date = function(MODISdate) {
+MODISdate = ee.Date(MODISdate.get('date'));
+ 
+  // use the masked landsat w/ ndsi data, filter by date object structure from above and advance by one day
+  var ndsi_subset =
+  ee.ImageCollection(filt2_l8_ndsi).filterDate( MODISdate,
+  MODISdate.advance(day_expand, 'day') );
+
+  ndsi_subset = ndsi_subset.map(function (image) {
+  var diff = MODISdate.difference(ee.Date(ee.Image(image).get('system:time_start')), 'day').abs();
+  return ee.Image(image).set('diff', diff);
+  });
+
+  // sort the difference values
+  ndsi_subset = ndsi_subset.sort('diff');
+  // calculate the date of the first object
+  var d = ndsi_subset.aggregate_first('system:time_start');
+  // calculate the number of non-null date values
+  var count = ndsi_subset.aggregate_count('system:time_start');
+ 
+  // if the number of non-null dates is greater than zero, create a date feature with the date of the first object,
+  // if not, create a date feature with the very first modis standard date
+  d = ee.Algorithms.If(
+  ee.Number(count).gt(0),
+  ee.Date(d),
+  ee.Date('1971-01-01')
+  );
+  // set the value of d based on above if statement
+  d = ee.Date(d);
+
+  // get the date from above in the form of YMD
+  var d2 = ee.Date.fromYMD(d.get('year'), d.get('month'),
+  d.get('day'));
+
+  // make a feature set with these parameters
+  var result = ee.Feature(null, {'LSdate': d2, 'MODISdate':
+  MODISdate, 'CountLSScenes': count});
+  result = result.set({'LSdate': d2, 'MODISdate': MODISdate,
+  'CountLSScenes': count});
+  return result;
+};
+
+
+// makes an image collection with one image per day, one band with a zero integer value for non landsat days,
+// image with single band with float value for landsat days
+var ls_collection = dates_modis.map(reduceLandsatNDSI);
+print(ls_collection,'ls collection');
+
+// creates a feature collection with all dates except for last date (after landsat date)
+var dates_landsat = dates_modis.map(extract_landsat_date);
+print(dates_landsat, 'dates landsat')
+
+// export the dates from above into a csv table
+Export.table(dates_landsat, csv_title);
+
+// makes one image with bands from all images in ls_collection, each separate image is now one band in this new image
+var ls_multiband = ls_collection.iterate( function(x,
+ ls_multiband) 
+{ return ee.Image(ls_multiband).addBands(ee.Image(x));
+}, ls_collection.first());
+
+print(ls_multiband, 'ls multiband 1')
+
+// makes landsat image stack with one image per day
+ls_multiband = ee.Image(ls_multiband).multiply(10000).int16(); 
+ls_multiband = ls_multiband.mask(ls_multiband.mask().multiply(ls_multiband.neq(0))); 
+
+
+//remove repeated first layer
+var ls_multiband2=ee.Image(ls_multiband.slice(1))
+var modis_multiband2=ee.Image(modis_multiband.slice(1))
+
+print(ls_multiband2, 'ls multiband2')
+print(modis_multiband2, 'modis multiband2')
+
+
+Export.image.toDrive({
+  image: modis_multiband2,
+  description: mod_title,
+  crs:'EPSG:4326 ',
+ region:testarea,
+ scale:30
+});
+
+
+Export.image.toDrive({
+  image: ls_multiband2, 
+  description: ls_title, 
+  crs:'EPSG:4326',
+  region:testarea,
+  scale:30
+});
