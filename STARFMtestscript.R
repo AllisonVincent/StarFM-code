@@ -1,17 +1,16 @@
 ######## R code for GEE/STARFM ######### 
 #### based on code by Faye Peters
 #### modified by Megan Gallagher with help from Jake Graham
+#### further modification for use with NDSI data by Allison Vincent
 ######################################################
-### Used in conjunction with GEE code modified by Megan Gallagher, this is for Landsat8 and MODIS Terra Daily 250 m use
+### Used in conjunction with GEE code, this is for Landsat8 and MODIS Terra Daily 500 m use
 ### Set up a folder that contains the Landsat, and MODIS files, as well as the starfm.exe and starfmconfig.txt
 ### create a separate folder called output in that folder
-### for code changes and inquiries for adjustment for certain factors please email: megangallagher@u.boisestate.edu 
 
 # install.packages("rdgal", "fields", "sp", "zoo", "ggplot2", "raster", "spam", "maps")
 
 # modified with help from Jake on 6/10/2019
 
-setwd('/home/ALLISONVINCENT/Documents/Research/STARFM/StarFM/STARFMtest/STARFM_NDSI_test')
 
 library(raster)
 library(rgdal)
@@ -21,10 +20,11 @@ library(fields)
 
 ## Load images and dates (be careful of matching dates and layers, the first layer may repeat)
 ## Read imagery dates and matching data:
-image_dates<- read.csv("./2016_Dates_BOP_East_run1.csv", stringsAsFactors=F) 
+## image_dates<- read.csv("./2016_Dates_BOP_East_run1.csv", stringsAsFactors=F) 
 ## dates are not used in this code but are useful for other programs like bfastspatial, to check date overlap, and timing
-modis<-brick("./2016_mod_East_run1.tif")
-landsat<-brick("./2016_landsat_East_run1.tif")
+
+modis<-brick("./2016_mod_East.tif")
+landsat<-brick("./2016_landsat_East.tif")
 
 ##percentage of cover that is used to find "good" landsat scenes for interpolation 
 ## is the inverse of the actual cloud cover, 99 percent means 1 percent of the pixels is an actual value
@@ -40,17 +40,17 @@ perc<- 99
  #     perc = percentage of cover used to find "good" landsat scenes for interpolation
  #     handleNA = logical variable indicating if the zeros in the data have been replaced with NA yet, default to TRUE for the first run
 
- #  OUTPUTS:
- #     "./modis_t1.envi" data for modis dates with corresponding "before" landsat dates
- #     "./modis_t2.envi" data for all modis dates in between
- #     "./modis_t3.envi" data for modis dates with corresponding "after" landsat dates
- #     "./landsat_t1.envi" data for landsat dates before corresponding modis dates
- #     "./landsat_t3.envi" data for landsat dates after corresponding modis dates
- #     "./landsat_t2_sim.envi" simulated data for non-landsat dates
- #     landsat_sim fused dataset with landsat and simulated data
+ #  OUTPUTS: all outputs (except landsat_sim) updated with each loop iteration
+ #     "./modis_t1.envi" data for modis at the date corresponding with the "before" landsat date 
+ #     "./modis_t2.envi" data for modis, regardless of landsat status 
+ #     "./modis_t3.envi" data for modis at the date corresponsing with the "after" landsat date 
+ #     "./landsat_t1.envi" data for landsat at the "before" date
+ #     "./landsat_t3.envi" data for landsat at the "after" dates
+ #     "./landsat_t2_sim.envi" simulated data 
+ #     landsat_sim simulated data with NA values
 
 
-# Not sure what's happening here
+# reads the number of rows and columns in the input rasters and pastes their values into the config file
 starfm<-function(modis,landsat,perc, handleNA = TRUE){
   config <- readLines("./StarFM_config.txt")
   config <- gsub("(.*NROWS = ).*$", paste0("\\1", nrow(landsat)),config )
@@ -60,7 +60,7 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
   
 
   if(handleNA){
-     ## Fix any missing data that enters as zeroes to our NA value.We have
+     ## Fix any missing data that enters as zeroes to our NA value. We have
      ## to do this by layer as operating on the entire stack may run into
      ## memory issues on larger subsets:
      for (i in 1:nlayers(modis)) {
@@ -92,14 +92,14 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
   filternew<-rep(NA,nlayers(modis))  # same here, only new variable name
   
   
-  # Go through landsat layers (starting at the 2nd layer)    
+  # Go through landsat layers (starting at the 2nd layer). Assuming that the first layer is a valid landsat layer  
   for (i in 2:nlayers(modis)){  
     test2[i] <-sum(landsat[[i]][])  # sum the value of the data found in each layer 
     filternew[i] <-(test2[i]>{-32768*perc_Area}) == 1  # if the sum from above is greater than -32768*perc_Area, then set the value of that layer equal to TRUE
   }
   
   
-  filt3 = which(filternew==1) # find which layers from above equal TRUE
+  filt3 = which(filternew==1) # find the positions of the layers above equal TRUE
   filt3 <-append(filt3,1,0) # add a 1 to the beginning of the filt3 vector
   # end up with the filt3 variable being the layer id numbers of all legitimate landsat data (every Landsat date included here, the layers in between each 16 days removed)
   
@@ -120,8 +120,8 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
   print("HERE!")
   flush.console()
   
-  good_landsat <- c(filt3) # create a new vector with the valid landsat layers from above
-  if(!length(good_landsat)){
+  good_landsat <- c(filt3) # create a new vector with the positions of the valid landsat layers from above
+  if(!length(good_landsat)){ # if good_landsat has no values (i.e. is NULL0
     print("WARNING!!!! No good landsat dates... exiting program...")
     flush.console()
     return(-1)
@@ -136,7 +136,7 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
       }
       else {  # if the layer (i.e., day) does not have a "good" landsat image then do...
         foo <- good_landsat - i # subtract i (~DOY) from the "good" landsat dates. This produces a measure of time differences
-        if(!length(which(foo==0))){ # safeguard in case there are NO "good" landsat images
+        if(!length(which(foo==0))){ # safeguard in case there are NO "good" landsat images. Is there a value in foo equal to zero?
           ls_t1 <- good_landsat[which(foo==max(foo[foo < 0]))] # select the closest date with a "good" image BEFORE this date
           ls_t3  <- good_landsat[which(foo==min(foo[foo > 0]))] # select the closest date with a "good" image AFTER this date
         }
@@ -145,16 +145,16 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
       
       ##end
       
-      m_t1 <- ls_t1  # set "good" landsat date to a variable that can be used for modis dataset
-      m_t3 <- ls_t3  # set "good" landsat date to a variable that can be used for modis dataset
+      m_t1 <- ls_t1  # set "good" landsat date to a variable that can be used for modis "before" pair
+      m_t3 <- ls_t3  # set "good" landsat date to a variable that can be used for modis "after" pair
 
-      modis_t1 <- modis[[m_t1]]  # modis dates with corresponding landsat dates
-      modis_t2 <- modis[[i]]  # all other modis dates, no landsat  
-      modis_t3 <- modis[[m_t3]] # modis dates with corresponding landsat dates
-      landsat_t1 <- landsat[[ls_t1]]  # all "good landsat dates
-      landsat_t3 <- landsat[[ls_t3]]  # all good landsat dates
+      modis_t1 <- modis[[m_t1]]  # raster of modis at date with corresponding "before" landsat dates
+      modis_t2 <- modis[[i]]  # raster of modis at dates at that step, regardless of landsat  
+      modis_t3 <- modis[[m_t3]] # raster of modis at date with corresponding "after" landsat dates
+      landsat_t1 <- landsat[[ls_t1]]  # raster of good landsat at "before" date
+      landsat_t3 <- landsat[[ls_t3]]  # raster of good landsat at "after" date
       
-      ## write rasters for StarFM to work on... can be seen in config file... "StarFM_config.txt"
+      ## write rasters for StarFM to work on (re-written for every step) ... can be seen in config file... "StarFM_config.txt"
       writeRaster(modis_t1, filename="./modis_t1.envi", bandorder='BSQ', datatype='INT2S', format="ENVI", overwrite=TRUE)
       writeRaster(modis_t2, filename="./modis_t2.envi",bandorder='BSQ', datatype='INT2S', format="ENVI", overwrite=TRUE)
       writeRaster(modis_t3, filename="./modis_t3.envi", bandorder='BSQ', datatype='INT2S', format="ENVI", overwrite=TRUE)
@@ -175,7 +175,7 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
       
       
     pbStep(pb, step=NULL, label='Processed Layer') } # progress bar related..
-    pbClose(pb, timer=T) # progress bar.. not working..
+    pbClose(pb, timer=T) # progress bar.. 
     return(landsat_sim)
   }
 }
@@ -183,77 +183,20 @@ starfm<-function(modis,landsat,perc, handleNA = TRUE){
 #### here we actually run the function
 
 #first time running
-#landsat_sim<-starfm(modis,landsat,perc)
+landsat_sim<-starfm(modis,landsat,perc)
 
-#all other times
-landsat_sim<-starfm(modis,landsat,perc, handleNA = F)
+#all other times, uncomment if input rasters with NA values have already been created
+# landsat_sim<-starfm(modis,landsat,perc, handleNA = F)
 
 
 #### Possible raster outputs for saving
-writeRaster(landsat_sim, filename="./output/2016_East_run1_fusion.envi",
-            bandorder='BSQ', datatype='INT2S', format="ENVI", overwrite=TRUE)
+## writeRaster(landsat_sim, filename="./output/2016_East_run1_fusion.envi",
+##            bandorder='BSQ', datatype='INT2S', format="ENVI", overwrite=TRUE)
 
-writeRaster(landsat_sim, filename="./output/2016_East_run1_fusion.tif", bandorder='BSQ', 
+writeRaster(landsat_sim, filename="./output/2016_East_fusion.tif", bandorder='BSQ', 
             datatype='INT2S',format='GTiff', overwrite=TRUE)
 
 
 
-#####################################################################################################################
-#### Basic Gaussian Smoothing
-######Inputs
 
-SD<-10 ## number of days for smoothing window
-landsat_sim<-landsat_sim ## name of raster brick
-
-############################################################
-#gaussian kernel
-GausKern <- function(SD){
-  gk <- rep(NA, SD*7)
-  inds <- seq(-(length(gk)/2), (length(gk)/2), 1) + .5
-  for(i in 1:length(gk)){
-    gk[i] <- (1/(sqrt(2*pi*SD^2))) * exp(-((inds[i])^2)/(2*SD^2))
-  }
-  gk <- gk + ((1-sum(gk))/length(gk))
-  return(gk)
-}
-gk <- GausKern(5)
-
-plot(gk)
-
-
-
-# prepare smoothing function
-# NAs are filled with median of that pixel through the time series (check bounds for best na)
-eles <- landsat_sim@ncols * landsat_sim@nrows
-imputed <- rep(NA, length(eles)) # the 
-upper<-8000 ##anything above this counts as noise
-lower<-1000 ## anything below this counts as noise
-
-test <- landsat_sim # duplicate the modis stack as a new variable
-test[] <- NA # convert all values in the stack to NA
-
-as.numeric(landsat_sim[i])
-for (i in 1:eles){
-  tmp <- as.numeric(landsat_sim[i])
-  tmp[tmp>upper] <-NA # set any values above the upper threshold to NA
-  tmp[tmp<lower] <-NA# set any values below the lower threshold to NA
-  imputed[i] <- length(which(is.na(tmp) == T))
-  tmp[is.na(tmp)] <- median(tmp,na.rm = TRUE) # fill NA values with median
-  test[i] <- convolve(tmp[2:(length(tmp)-2)],gk, type = "filter") # applies the gaussian filter
-}
-
-
-writeRaster(test, filename="./output/landsat_smooth.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
-
-#histogram and summary of the number of "missing" or "imputed" cells
-hist(imputed)
-summary(imputed)
-
-
-
-
-###############################################Plots for smoothing view#############################################
-#par(mfrow=c(2,1))
-plot(1:length(landsat_sim[1]), landsat_sim[1], type = "l")
-lines(1:length(landsat_sim[1]), test[1], col = "red", lwd = 2)
 
