@@ -5,10 +5,10 @@
 
 // for use with Landsat8 and MODIS Terra Daily Surface Reflectance (MOD09GA) 500m
 
-// Imports needed
+//// Imports needed
+
 var landsat = ee.ImageCollection("LANDSAT/LC08/C01/T1_SR"),
     watersheds = ee.FeatureCollection("USGS/WBD/2017/HUC10"),
-    modis = ee.ImageCollection("MODIS/006/MCD43A4"),
     mod09 = ee.ImageCollection("MODIS/006/MOD09GA"),
     testarea =  // currently set to encompass entire East River watershed
     /* color: #d63000 */
@@ -49,11 +49,11 @@ Map.addLayer(mod09_2016, visParamsmod09, 'mod09 true color');
 Map.addLayer(watersheds, {}, "watersheds", false)
 var watershed = watersheds.filterMetadata('name', 'equals', 'East River')
 var EastRiver = watershed.filterMetadata('states', 'equals', 'CO');
-Map.centerObject(EastRiver, 11);
+Map.centerObject(EastRiver, 8);
 Map.addLayer(EastRiver, {}, "East River Boundary");
 
 
-//// Code for original workflow starts here
+//// Code for original workflow starts here. Set the dates and region of interest
 
 //import Landsat 8 Surface Reflectance Tier 1 and MODIS MOD09GA
 var inner_region = testarea //region you want to export 
@@ -62,7 +62,7 @@ var date_begin = '2016-03-17' //start date of data collection, must be a landsat
 var date_end ='2016-05-05' // end date of data collection, must be the day AFTER last landsat image
 
 // for output
-var csv_title = '2016_Dates_BOP_East' //title of csv output
+var csv_title = '2016_Dates_East' //title of csv output
 var ls_title = '2016_landsat_East'   // title of landsat tif file
 var mod_title = '2016_mod_East'      // title of modis tif file
 
@@ -79,18 +79,19 @@ print("original modis", filt_mod)
 var subset_bounds = outerarea.transform('EPSG:4326', 30).bounds().getInfo(); 
 
 
-// Landsat Pixel QA
+//// Landsat Pixel QA
+
 // get rid of bad pixels but keep metadata date information (for landsat data)
 var removeBadObservations = function(image){
     var clear_scenes = ee.Image(image).select('pixel_qa').bitwiseAnd(2).neq(0); // selecting clear scenes (selecting the bit value = 2, which is clear)
     var snow_scenes = ee.Image(image).select('pixel_qa').bitwiseAnd(16).neq(0); // selecting snow scenes
     var good_scenes = snow_scenes.add(clear_scenes);
   
-    //find the sum of the number of bands with mask applied
+    //find the sum of the number of bands in each image of the image collection
     var numberBandsHaveData =
     image.mask().reduce(ee.Reducer.sum());
   
-    // make sure all bands have data (metadata?)
+    // make sure all bands have either no data or data in the number of bands specified
     var allOrNoBandsHaveData =
     numberBandsHaveData.eq(0).or(numberBandsHaveData.gte(9));
     var allBandsHaveData = allOrNoBandsHaveData;
@@ -103,7 +104,7 @@ var removeBadObservations = function(image){
     return result.copyProperties(ee.Image(image),['system:time_start']);
 };
 
-//NDSI functions for Landsat and MODIS
+//// NDSI functions for Landsat and MODIS
 
 //calculate NDSI for modis MCD43A4, and multiply the results by 10,000
 var getNDSI_mod = function(image){
@@ -136,9 +137,83 @@ var extract_modis_date = function(row) {
   return result;
 };
 
+
+///// Functions to extract QA information from modis surface reflectance MOD09GA data. 
+
+/**
+ * Args:
+ *   image - The QA Image to get bits from.
+ *   bits - The bits from the 'state_1km' band we want
+**/
+
+
+// this version of the function is used to extract the bits that are flagged as true/false
+var testBits = function(image, bits){
+    var pattern = 0;
+    for (var i = 0; i < bits.length; i++){
+       pattern += Math.pow(2, bits[i])
+    }
+    return image.bitwiseAnd(pattern).gt(0);
+};
+
+/**
+ * Args:
+ *   image - The QA Image to get bits from.
+ *   start - The first bit position, 0-based.
+ *   end   - The last bit position, inclusive.
+ *   name  - A name for the output image.
+**/ 
+
+// This version of the function is used to extract specific bit values 
+var getQABits = function(image, start, end, newName) {
+    var pattern = 0;
+    for (var i = start; i <= end; i++) {
+       pattern += Math.pow(2, i);
+    }
+    return image.select([0], [newName])
+                  .bitwiseAnd(pattern)
+                  .rightShift(start);
+};
+
+
+//// Apply and view quality masked modis with ndsi band, set to the outer bounding region 
+
+var qaBand = 'state_1km';
+
+// using the above functions here 
+filtered_modis = filtered_modis.map(function(image){
+// use the "state_1km" qa band for cloud info as specified in MODIS surface reflectance data product guide
+var input = image.select(qaBand); 
+// Extract the bits that contain the MOD35 snow/ice flag (bit 12 where 1 = true)
+// and the internal snow mask (bit 15 where 1 = true)
+var snowice = testBits(input, [12, 15]);
+//Extract the bits that contain the internal cloud algorithm flag (bit 10 where 0 = false)
+var cloudflag = testBits(input, [10]).not();
+// Get the cloud_state bits (0-1) and find clear areas (bit combination 00) and not set, but assumed clear areas
+// (bit combination 11)
+var clear = getQABits(input, 0, 1, 'cloud_state')
+                    .expression("b(0) == 0 || b(0) == 3");
+var good_pixels = snowice.add(clear).add(cloudflag)
+return image.clip(subset_bounds).mask(image.mask().multiply(subset_mask).multiply(good_pixels));
+});
+
+var bands = ['sur_refl_b01', 'sur_refl_b04', 'sur_refl_b03'];
+var band = 'NDSI'
+
+
+// to look at specific layers of the image collection of masked modis data
+var listOfImages = filtered_modis.toList(filtered_modis.size());
+print('List:',listOfImages);
+var img1 = ee.Image(listOfImages.get(0));
+
+//Map.addLayer(filtered_modis, {min:0, max:3000, bands: bands}, 'masked')
+Map.addLayer(img1, {band: band}, 'masked')
+print("filtered_modis", filtered_modis)
+
+
 filtered_modis = filtered_modis.select('NDSI'); //Take only NDSI band
 print('modis only ndsi',filtered_modis) // make sure the modis image collection only has the NDSI band for each element
-Map.addLayer(filtered_modis, {}, 'filtered modis')
+
 
 // creates the image stack containing modis data that will be exported
 // multi-image modis gets turned into one image with multiple bands containing ndsi for each date
@@ -150,18 +225,44 @@ print(modis_multiband, 'modis_multiband');
 // get the dates for each modis observation
 var dates_modis = filtered_modis.map(extract_modis_date);
 print('dates_modis', dates_modis.getInfo());
+
  
-// applies quality masked landsat with ndsi band to the outer bounding region 
+//// Apply and view quality masked landsat with ndsi band, set to the outer bounding region 
+
 var filt2_l8_ndsi = filt2_l8.map(function(image) {
 return ee.Image(image)
   .clip(subset_bounds)
   .mask(ee.Image(image).mask().multiply(subset_mask));
 });
 
-print("filtered modis", filtered_modis)
+// to look at specific layers of the image collection of masked landsat data
+var imageList = filt2_l8_ndsi.toList(filt2_l8_ndsi.size());
+print('List:', imageList);
+var img2 = ee.Image(imageList.get(0));
+
 print("filt2_l8_ndsi", filt2_l8_ndsi)
-Map.addLayer(filt2_l8_ndsi, {}, "filt2_l8_ndsi");
+Map.addLayer(img2, {palette: ['00FFFF', '0000FF']}, "filt2_l8_ndsi");
+
+// find the fraction of the image (the actual test area) that has data after cloud filtering
+var data_count = img2.reduceRegion({
+  reducer: ee.Reducer.count(),
+  geometry: inner_region,
+  scale: 30
+})
+print(data_count, "data count")
+
+var npix = img2.unmask().reduceRegion({
+  reducer: ee.Reducer.count(),
+  geometry: inner_region,
+  scale: 30
+})
+print(npix, "npix")
+
+var data_frac = ((ee.Number(data_count.get('nd'))).divide(ee.Number(npix.get('nd'))));
+print(data_frac, "data frac")
+
  
+//// Set up the date functions for final export format
 
 //use this to choose the range of days, and check for overlap
 var day_expand = 1;
@@ -234,6 +335,8 @@ MODISdate = ee.Date(MODISdate.get('date'));
 };
 
 
+//// Format the data into the raster stack for export
+
 // makes an image collection with one image per day, one band with a zero integer value for non landsat days,
 // image with single band with float value for landsat days
 var ls_collection = dates_modis.map(reduceLandsatNDSI);
@@ -252,8 +355,6 @@ var ls_multiband = ls_collection.iterate( function(x,
 { return ee.Image(ls_multiband).addBands(ee.Image(x));
 }, ls_collection.first());
 
-print(ls_multiband, 'ls multiband 1')
-
 // makes landsat image stack with one image per day
 ls_multiband = ee.Image(ls_multiband).multiply(10000).int16(); 
 ls_multiband = ls_multiband.mask(ls_multiband.mask().multiply(ls_multiband.neq(0))); 
@@ -263,9 +364,7 @@ ls_multiband = ls_multiband.mask(ls_multiband.mask().multiply(ls_multiband.neq(0
 var ls_multiband2=ee.Image(ls_multiband.slice(1))
 var modis_multiband2=ee.Image(modis_multiband.slice(1))
 
-print(ls_multiband2, 'ls multiband2')
-print(modis_multiband2, 'modis multiband2')
-
+//// Export final products to drive
 
 Export.image.toDrive({
   image: modis_multiband2,
