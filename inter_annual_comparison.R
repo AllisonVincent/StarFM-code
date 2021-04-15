@@ -696,9 +696,9 @@ text(mids, means + 25, paste(round(means)), cex = 1.2)
 
 ########### Analysis by vegetation class
 
-east_veg_class<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/US_200EVT_ERarea/LF_fullarea/Lf_fullarea.tif')
+east_veg_class<- raster('./Lf_fullarea.tif')
 
-class_dbf<- read.dbf('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/US_200EVT_ERarea/LF_fullarea/LF_fullarea.tif.vat.dbf')
+class_dbf<- read.dbf('./LF_fullarea.tif.vat.dbf')
 
 
 ## Call the raster attribute table ('RAT') for the raster data

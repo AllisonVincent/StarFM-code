@@ -1,9 +1,6 @@
 ### This script was written to calculate per-pixel model accuracy in order to analyze STARFM's spatial performance by landscape characteristics. 
 
 
-setwd('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/model_id')
-
-
 library(sp)
 library(sf)
 library(ggplot2)
@@ -33,20 +30,21 @@ library(viridis)
 #writeRaster(all_sum, filename="C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_Season/DEM_Analysis/east_sum.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
 
 ## Load in the other data that will be needed for analysis (watershed shapefile, DEM, calculated aspect, calculated slope)
+## slope and aspect data calculated in dem_anaysis.R script
 
-east_DEM<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/East_DEM.tif')
+east_DEM<- raster('./East_DEM.tif')
 
-east_slope<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/east_slope.tif')
+east_slope<- raster('./east_slope.tif')
 
-east_aspect<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/east_aspect.tif')
+east_aspect<- raster('./east_aspect.tif')
   
-ER<- readOGR('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/ER_watershed_shp/EastRiver_Project.shp') #shapefile of the study watershed for reference
+ER<- readOGR('./EastRiver_Project.shp') #shapefile of the study watershed for reference
 
 ## Sum of correct instances of prediction per pixel
-east_sum<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/east_sum.tif')
+east_sum<- raster('./east_sum.tif')
 
 ## Sum of total number of predictions per pixel, regardless of correctness
-east_model_sum<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/model_id/model_pred_sum.tif')
+east_model_sum<- raster('./model_pred_sum.tif')
 
 
 ## Project the shapefile to the same projection as the rasters
@@ -721,9 +719,9 @@ text(mids, means + 0.2, paste(round(means, digits = 2)), cex = 1.2)
 
 ########### Analysis by vegetation class
 
-east_veg_class<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/US_200EVT_ERarea/LF_fullarea/Lf_fullarea.tif')
+east_veg_class<- raster('./Lf_fullarea.tif')
 
-class_dbf<- read.dbf('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/US_200EVT_ERarea/LF_fullarea/LF_fullarea.tif.vat.dbf')
+class_dbf<- read.dbf('./LF_fullarea.tif.vat.dbf')
 
 
 ## Call the raster attribute table ('RAT') for the raster data
