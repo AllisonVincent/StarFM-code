@@ -18,9 +18,9 @@ library(rasterVis)
 
 ### Load in the ASO data and watershed shapefile
 
-ER<- readOGR('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/ER_watershed_shp/EastRiver_Project.shp') #shapefile of the study watershed for reference
-aso_50m<- raster('C:/Users/Allison and Brian/Documents/Research/ASO_Data/Raster_Data/ASO_50M_SD_USCOCB_20160404.tif')
-aso_3m<- raster('C:/Users/Allison and Brian/Documents/Research/ASO_Data/Raster_Data/ASO_3M_SD_USCOCB_20160404.tif')
+ER<- readOGR('./EastRiver_Project.shp') #shapefile of the study watershed for reference
+aso_50m<- raster('./ASO_50M.tif')
+aso_3m<- raster('./ASO_3M.tif')
 
 ### Check the projections of the data
 
@@ -38,14 +38,14 @@ proj4string(ER_proj)
 par(mar = c(4,4,4,3.5))
 plot(aso_50m, col = rev(viridis(25)), main = "", xlab = "Meters", ylab = "Meters", cex.lab = 1, cex.axis = 0.9, legend = FALSE)
 title(main = list("ASO 50-m Snow Depths", cex = 1.5), line = 1.5)
-mtext("4 April 2016", line = 0.15, cex = 1.2)
+mtext("Date", line = 0.15, cex = 1.2)
 plot(aso_50m, legend.only = TRUE, col = rev(viridis(25)), axis.args = list(cex.axis = 1.1), legend.args = list(text = 'Depths (m)', line = 0.5))
 plot(ER_proj, border = "black", add = TRUE)
 
 
 
 ## Plot the 3-m ASO data as is
-plot(aso_3m, main = "ASO 3m snow depths (m) 4/4/2016")
+plot(aso_3m, main = "ASO 3m snow depths (m)")
 plot(ER_proj, border = "black", add = TRUE)
 
 ### Plot the ASO data as snow/no snow
@@ -99,27 +99,27 @@ hist(aso_3m_vec, main = "ASO 3m depth values", xlab = "depth (m)", col = "blue")
 ### Compare the ASO data to STARFM output from that date
 ## Bring in the model data and format it to be plotted
 
-starfm<- brick('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/4.2.2016/032416_041016_fusion.tif')
+starfm<- brick('./starfm_fusion.tif')
 
 ## If importing the entire raster brick of STARFM results, specify the layer of interest whose date matches the ASO data
-starfm_apr4<- brick(starfm[[12]])
+starfm_day1<- brick(starfm[[1]])
 
 
 ### Mask the no data values
-starfm_apr4<- reclassify(starfm_apr4, cbind(-Inf, -11111, NA))
-starfm_apr4<- starfm_apr4/10000
+starfm_day1<- reclassify(starfm_day1, cbind(-Inf, -11111, NA))
+starfm_day1<- starfm_day1/10000
 
 
 ## Need to make the 2 raster projections match
 
 aso_crs = crs(aso_50m)
-starfm_apr4_proj<- projectRaster(starfm_apr4, crs = aso_crs)
+starfm_day1_proj<- projectRaster(starfm_day1, crs = aso_crs)
 
 
 ### Creating binary snow rasters (with rasters in same projection)
 
 # Any values in our rasters of below 0.4 are given a new value of zero (no snow)
-starfm_binary_proj<- reclassify(starfm_apr4_proj,cbind(-Inf, 0.4, 0))
+starfm_binary_proj<- reclassify(starfm_day1_proj,cbind(-Inf, 0.4, 0))
 
 # Any values in our rasters of 0.4 or above are given a new value of 1 (snow)
 starfm_binary_proj<- reclassify(starfm_binary_proj,cbind(0.4, Inf, 1))
@@ -154,7 +154,7 @@ aso_30m <- resample(aso_cutoff, starfm_binary_proj, method = 'bilinear')
 aso_30m_data<- reclassify(aso_30m, cbind(-Inf, Inf, 1))
 
 ## Using STARFM data where NAs have been assigned and NDSI magnitude corrected, but is not yet projected, set all pixels w/ data to a value of 1
-starfm_data<- reclassify(starfm_apr4, cbind(-Inf, Inf, 1))
+starfm_data<- reclassify(starfm_day1, cbind(-Inf, Inf, 1))
 
 ## Now project the STARFM raster
 starfm_data_proj<- projectRaster(starfm_data, crs = aso_crs)
