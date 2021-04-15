@@ -3,14 +3,10 @@
 
 library(raster)
 
-setwd('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Analysis_Tests')
+landsat<- brick('./landsat.tif')
+modis<- brick('./mod_.tif')
 
-landsat<- brick('./05022015_06032015/landsat_East_05022015_06032015.tif')
-modis<- brick('./05022015_06032015/mod_East_05022015_06032015.tif')
-
-data_orig<- brick('./05022015_06032015/2015_05022015_06032015_East_fusion.tif')
-
-data<- brick('./05022015_06032015/2015_05022015_06032015_East_fusion.tif')
+data<- brick('./starfm_East_fusion.tif') ## starfm data
 
 
 
