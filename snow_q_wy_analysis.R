@@ -2,7 +2,6 @@
 
 ### Stream flow data is from the USGS (water.usgs.gov)
 
-setwd('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Analysis_Tests')
 
 library(sp)
 library(sf)
@@ -22,12 +21,12 @@ library(RColorBrewer)
 library(viridis)
 
 
-ER<- readOGR("C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_Season/ER_watershed_shp/EastRiver_Project.shp") #shapefile of the study watershed for reference
+ER<- readOGR("./EastRiver_Project.shp") #shapefile of the study watershed for reference
 
 ## Rasters of the total number of snow covered days per pixel by water year 
-snow_sum_2008<- raster("./WY2008/Results/WY2008_snow_sum.tif")
-snow_sum_2010<- raster("./WY2010/Results/WY2010_snow_sum.tif")
-snow_sum_2012<- raster("./WY2012/Results/WY2012_snow_sum.tif")
+snow_sum_2008<- raster("./WY2008_snow_sum.tif")
+snow_sum_2010<- raster("./WY2010_snow_sum.tif")
+snow_sum_2012<- raster("./WY2012_snow_sum.tif")
 
 ## Project the watershed shapefile to match the projection of the raster data
 data_proj<- crs(snow_sum_2008)
@@ -35,9 +34,9 @@ ER_proj<- spTransform(ER, data_proj)
 proj4string(ER_proj)
 
 ## Rasters of the total number of days each pixel had data (regardless of snow status) by water year
-total_model_2008<- raster('./WY2008/WY2008_model_sum.tif')
-total_model_2010<- raster('./WY2010/WY2010_model_sum.tif')
-total_model_2012<- raster('./WY2012/WY2012_model_sum.tif')
+total_model_2008<- raster('./WY2008_model_sum.tif')
+total_model_2010<- raster('./WY2010_model_sum.tif')
+total_model_2012<- raster('./WY2012_model_sum.tif')
 
 
 ### Using the raster data above, find the percent of snow-covered days by pixel for each water year
