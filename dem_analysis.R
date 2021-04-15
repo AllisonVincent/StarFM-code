@@ -14,8 +14,8 @@ library(wesanderson)
 
 ### Load the DEM and watershed shapefile, set to common projection
 
-east_dem <- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/East_DEM.tif')
-ER<- readOGR('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/ER_watershed_shp/EastRiver_Project.shp') #shapefile of the study watershed for reference
+east_dem <- raster('./East_DEM.tif')
+ER<- readOGR('./EastRiver_Project.shp') #shapefile of the study watershed for reference
 
 ## Find the projection of the DEM and project the watershed shapefile to match
 proj4string(east_dem)
@@ -37,7 +37,7 @@ plot(east_slope, main = "Slope (deg)")
 plot(ER_proj, border = "black", add = TRUE)
 
 ## Option to save slope results as its own raster file
-#writeRaster(east_slope, filename="C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_Season/DEM_Analysis/east_slope.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
+#writeRaster(east_slope, filename="./east_slope.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
 
 east_aspect<- terrain(east_dem, opt = "aspect", unit = "degrees", neighbors = 8)
 
@@ -45,7 +45,7 @@ plot(east_aspect, main = "Aspect (deg)")
 plot(ER_proj, border = "black", add = TRUE)
 
 ## Option to save aspect results as its own raster file
-#writeRaster(east_aspect, filename="C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_Season/DEM_Analysis/east_aspect.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
+#writeRaster(east_aspect, filename="./east_aspect.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
 
 
 ###################################################################################
