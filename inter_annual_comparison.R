@@ -1,8 +1,6 @@
 ### This script is for analyzing percent annual snow cover by landscape feature and plotting these data for all water years
 
 
-setwd('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Analysis_Tests')
-
 library(sp)
 library(sf)
 library(ggplot2)
@@ -21,18 +19,18 @@ library(RColorBrewer)
 library(viridis)
 
 
-ER<- readOGR("C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_Season/ER_watershed_shp/EastRiver_Project.shp") #shapefile of the study watershed for reference
+ER<- readOGR("./EastRiver_Project.shp") #shapefile of the study watershed for reference
 
 
 
 ######### Compare number percent of snow-covered days to topographic features by water year
 
 ## Load in the rasters with elevation, slope, and aspect data (slope and aspect data calculated in dem_anaysis.R script)
-east_DEM<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/East_DEM.tif')
+east_DEM<- raster('./East_DEM.tif')
 
-east_slope<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/east_slope.tif')
+east_slope<- raster('./east_slope.tif')
 
-east_aspect<- raster('C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_season/DEM_analysis/east_aspect.tif')
+east_aspect<- raster('./east_aspect.tif')
 
 
 ####### Elevation analyses 
