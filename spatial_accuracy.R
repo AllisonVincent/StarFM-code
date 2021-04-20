@@ -19,17 +19,7 @@ library(RColorBrewer)
 library(viridis)
 
 
-############# Put all the rasters of the id'd dates (rasters of 1 for correct prediction, 0 for incorrect prediction), into one brick raster
-
-#brick<- do.call(brick, lapply(list.files(path = getwd(), pattern = "id_*"), raster))
-
-## Sum all the rasters together, so the value of the sum for each pixel is the value of the number of instances that the model prediction was correct
-
-#all_sum<- calc(brick, fun = sum, na.rm = TRUE)
-
-#writeRaster(all_sum, filename="C:/Users/Allison and Brian/Documents/Research/STARFM/STARFMtest/Validation_Tests/Full_Season/DEM_Analysis/east_sum.tif", bandorder='BSQ', datatype='INT2S',format='GTiff', overwrite=TRUE)
-
-## Load in the other data that will be needed for analysis (watershed shapefile, DEM, calculated aspect, calculated slope)
+## Load in landscape characteristics data that will be needed for analysis (watershed shapefile, DEM, calculated aspect, calculated slope)
 ## slope and aspect data calculated in dem_anaysis.R script
 
 east_DEM<- raster('./East_DEM.tif')
@@ -40,6 +30,8 @@ east_aspect<- raster('./east_aspect.tif')
   
 ER<- readOGR('./EastRiver_Project.shp') #shapefile of the study watershed for reference
 
+
+#### The data inputs below can be created with the starfm_spatial_error.R script
 ## Sum of correct instances of prediction per pixel
 east_sum<- raster('./east_sum.tif')
 
