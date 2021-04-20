@@ -127,6 +127,11 @@ starfm_binary<- reclassify(starfm_plot,cbind(-Inf, 0.4, 0))
 landsat_binary<- reclassify(landsat_binary,cbind(0.4, Inf, 1))
 starfm_binary<- reclassify(starfm_binary,cbind(0.4, Inf, 1))
 
+### Save raster file of landsat snow status
+writeRaster(landsat_binary, filename = "./landsat_snow_status.tif", bandorder='BSQ', datatype='INT2S', formatt='GTiff', overwrite=TRUE)
+
+### Save raster file of starfm snow status
+writeRaster(starfm_binary, filename = "./starfm_snow_status.tif", bandorder='BSQ', datatype='INT2S', formatt='GTiff', overwrite=TRUE)
 
 
 ## create levelplots to display the snow status. Requires the rasterVis library
@@ -134,7 +139,6 @@ landsat_bi_fac<- as.factor(landsat_binary)
 rat<- levels(landsat_bi_fac)[[1]]
 rat[["status"]] <- c("no snow", "snow")
 levels(landsat_bi_fac)<- rat
-
 
 dev.new()
 levelplot(landsat_bi_fac, att = "status", col.regions = rev(cm.colors(40)), scales = list(x = list(cex = 1.5), y = list(cex = 1.5)), xlab = list(label = "Longitude", cex = 2), ylab = list(label = "Latitude", cex = 2),  main = list(label = "Landsat Snow Status", cex = 2),  colorkey = list(labels = list(height = 2, cex = 1.9))) + layer(sp.polygons(ER_proj)) 
@@ -152,8 +156,7 @@ levelplot(starfm_bi_fac, att = "status", col.regions = rev(cm.colors(40)), scale
 
 
 
-
-## Find the fSCA for each raster
+## Find the fractional snow-covered area (fSCA) for each raster
 
 L8_snow<- as.vector(landsat_binary, mode = 'numeric')
 L8_snow_sum<- sum(L8_snow, na.rm = TRUE) ## Find the sum all pixels that have a value equal to 1 (snow status)
@@ -187,7 +190,7 @@ prec_model<- classes[[5]]
 recall_model<- classes[[6]]
 f1_model<- classes[[7]]
 
-date<- "12.3.2015"
+date<- "12.3.2015" ## for table below
 
 results_end<- c(date, acc_model, spec_model, recall_model, prec_model, f1_model, L8_fsca, starfm_fsca, L8_data, model_data)
 labels<- c("Date", "Accuracy", "Specificity", "Recall", "Precision", "F-Score", "L8 fSCA", "STARFM fSCA", "L8 Data", "STARFM Data")
